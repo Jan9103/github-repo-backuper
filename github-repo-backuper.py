@@ -43,22 +43,24 @@ class GithubRepoBackuper:
         self,
         repo_owner: str = "",  # = "" makes **args possible without linting issues
         repo_name: str = "",
-        do_prune: bool = False,
+        prune: bool = False,
         detailed_prs: bool = False,
         include_lfs: bool = False,
         include_releases: bool = False,
+        include_wiki: bool = False,
         last_backup: Optional[str] = None,
     ) -> None:
         assert repo_owner != "" and repo_name != ""
         logger.debug(f"created GithubRepoBackuper for {repo_owner}/{repo_name}")
         self._detailed_prs: bool = detailed_prs
         self._include_lfs: bool = include_lfs
-        self._do_prune: bool = do_prune
+        self._do_prune: bool = prune
         self._last_backup: Optional[str] = last_backup
         self._repo_name: str = repo_name
         self._repo_owner: str = repo_owner
         self._start_time: Optional[str] = None
         self._include_releases: bool = include_releases
+        self._include_wiki: bool = include_wiki
 
         if path.exists(path.join("github", repo_owner, repo_name, "ghrb.json")):
             logger.debug("found existing ghrb.json")
@@ -73,7 +75,10 @@ class GithubRepoBackuper:
         self._start_time = _datetime_for_github()
         self._download_issues()
         self._download_git()
-        self._download_releases()
+        if self._include_releases:
+            self._download_releases()
+        if self._include_wiki:
+            self._download_git(wiki=True)
         # TODO: save start-time to file
         with open(path.join("github", self._repo_owner, self._repo_name, "ghrb.json"), "w") as fp:
             json.dump({
@@ -132,25 +137,30 @@ class GithubRepoBackuper:
                 json.dump(output_issue, fp)
             # TODO: save user info if new
 
-    def _download_git(self) -> None:
+    def _download_git(self, wiki: bool = False) -> None:
         logger.info("backing up git..")
-        if path.exists(path.join("github", self._repo_owner, self._repo_name, "git")):
-            logger.info("incremental git backup using fetch..")
+        dirname: str = "wiki" if wiki else "git"
+        if path.exists(path.join("github", self._repo_owner, self._repo_name, dirname)):
+            logger.info(f"incremental {'wiki ' if wiki else ''}git backup using fetch..")
             subprocess.run(
                 ["git", "fetch", "--all", *(["--prune"] if self._do_prune else [])],
-                cwd=path.join(path.curdir, "github", self._repo_owner, self._repo_name, "git"),
+                cwd=path.join(path.curdir, "github", self._repo_owner, self._repo_name, dirname),
             )
         else:
-            logger.info("initial git backup using clone..")
+            logger.info(f"initial {'wiki ' if wiki else ''}git backup using clone..")
             subprocess.run(
-                ["git", "clone", "--mirror", f"https://github.com/{self._repo_owner}/{self._repo_name}.git", "git"],
+                [
+                    "git", "clone", "--mirror",
+                    f"https://github.com/{self._repo_owner}/{self._repo_name}{'.wiki' if wiki else ''}.git",
+                    dirname
+                ],
                 cwd=path.join(path.curdir, "github", self._repo_owner, self._repo_name),
             )
         if self._include_lfs:
-            logger.info("downloading git-lfs")
+            logger.info(f"downloading {'wiki ' if wiki else ''}git-lfs")
             subprocess.run(
                 ["git", "lfs", "fetch", "--all"],
-                cwd=path.join(path.curdir, "github", self._repo_owner, self._repo_name, "git"),
+                cwd=path.join(path.curdir, "github", self._repo_owner, self._repo_name, dirname),
             )
 
     def _download_releases(self) -> None:
@@ -281,11 +291,11 @@ def main() -> None:
     parser.add_argument("--detailed-prs", action="store_true", help="Store detailed PR information.")
     parser.add_argument("--include-lfs", action="store_true", help="Include git-lfs (requires git-lfs to be installed).")
     parser.add_argument("--include-releases", action="store_true", help="include github releases.")
-    args = parser.parse_args()
+    parser.add_argument("--include-wiki", action="store_true", help="include github wiki.")
+    args = parser.parse_args()._get_kwargs()
     del parser
-    logger.debug("arguments: " + "; ".join({f"{k}: {v}" for k, v in args.items()}))
-    GithubRepoBackuper(**args.items()).start_backup()
-    #GithubRepoBackuper(args.repo_owner, args.repo_name, args.prune, args.include_lfs, args.include_releases).start_backup()
+    logger.debug("arguments: " + "; ".join({f"{k}: {v}" for k, v in args}))
+    GithubRepoBackuper(**{k: v for k, v in args}).start_backup()
 
 
 if __name__ == "__main__":

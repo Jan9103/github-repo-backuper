@@ -8,7 +8,7 @@ Supported informations:
 * [x] Issues (including comments, close-state, assignees, labels, etc)
 * [x] Pull-Requests (including git base/head, comments, close/merge-state, assignees, labels, etc)
 * [x] Releases (including assets)
-* [ ] Wiki
+* [x] Wiki
 * [ ] GitHub-Actions results
 * [ ] Discussions
 * [ ] Projects
