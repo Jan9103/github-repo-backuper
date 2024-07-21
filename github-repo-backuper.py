@@ -127,12 +127,12 @@ class GithubRepoBackuper:
                 "created_at": issue.get("created_at"),
                 "draft": issue.get("draft"),
                 "reactions": _prettify_reactions(issue.get("reactions")),
-                "labels": [i["name"] for i in issue.get("labels", []) if "name" in i],
+                "labels": [i["name"] for i in (issue.get("labels") or []) if "name" in i],
                 "locked": issue.get("locked"),
                 "state": issue.get("state"),
                 "title": issue.get("title"),
                 "user": issue.get("user", {}).get("login"),
-                "comments": (_get_issue_comments(issue.get("comments_url")) if issue.get("comments", 0) > 0 else []),
+                "comments": (_get_issue_comments(issue.get("comments_url")) if (issue.get("comments") or 0) > 0 else []),
                 **({
                     "is_pull_request": True,
                     "merged_at": issue["pull_request"].get("merged_at"),
@@ -241,12 +241,12 @@ def _get_pr_details(url: Optional[str]) -> Dict[str, Any]:
         "merge_commit_sha": pr.get("merge_commit_sha"),
         "requested_reviewers": pr.get("requested_reviewers"),
         "head": {
-            "gh_repo": pr.get("head", {}).get("repo", {}).get("full_name"),
-            "ref": pr.get("head", {}).get("ref"),
+            "gh_repo": ((pr.get("head") or {}).get("repo") or {}).get("full_name"),
+            "ref": (pr.get("head") or {}).get("ref"),
         },
-        "base": pr.get("base", {}).get("ref"),
+        "base": (pr.get("base") or {}).get("ref"),
         "merged": pr.get("merged"),
-        "merged_by": (pr.get("merged_by", None) or {}).get("login"),
+        "merged_by": (pr.get("merged_by") or {}).get("login"),
     }
 
 
@@ -263,7 +263,7 @@ def _get_issue_comments(url: Optional[str]) -> List[Dict[str, Any]]:
             "created_at": comment.get("created_at"),
             "updated_at": comment.get("updated_at"),
             "reactions": _prettify_reactions(comment.get("reactions")),
-            "user": comment.get("user", {}).get("login"),
+            "user": (comment.get("user") or {}).get("login"),
         })
     return output
 
