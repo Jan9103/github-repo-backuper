@@ -88,7 +88,6 @@ class GithubRepoBackuper:
             self._download_releases()
         if self._include_wiki:
             self._download_git(wiki=True)
-        # TODO: save start-time to file
         with open(path.join("github", self._repo_owner, self._repo_name, "ghrb.json"), "w") as fp:
             json.dump({
                 "last_backup": self._start_time,
@@ -277,9 +276,10 @@ def _prettify_reactions(reactions: Optional[Dict[str, Any]]) -> Dict[str, int]:
 
 def _handle_ratelimit(resp: requests.Response) -> None:
     if resp.headers["X-RateLimit-Remaining"] == "0":
-        logger.info(f"Hit ratelimet. waiting for reset..")
         # +10 in case the local clock is off by something
-        sleep((int(resp.headers["X-RateLimit-Reset"]) - floor(time()) + 10))
+        sleep_seconds: int = int(resp.headers["X-RateLimit-Reset"]) - floor(time()) + 10
+        logger.info(f"Hit ratelimet. waiting for reset (~{sleep_seconds // 60}mins)..")
+        sleep(sleep_seconds)
 
 
 def _datetime_for_github() -> str:
