@@ -246,7 +246,7 @@ def _get_pr_details(url: Optional[str]) -> Dict[str, Any]:
         },
         "base": pr.get("base", {}).get("ref"),
         "merged": pr.get("merged"),
-        "merged_by": pr.get("merged_by", {}).get("login"),
+        "merged_by": (pr.get("merged_by", None) or {}).get("login"),
     }
 
 
