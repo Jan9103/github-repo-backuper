@@ -26,3 +26,4 @@ Features:
 * Arguments can configure what gets downloaded
 * Increments of existing backups are possible (and are faster than new backups)
 * It handles ratelimits (by waiting once its reached) and pagination
+* Optional on-save compression of result (`--gzip`)

@@ -13,6 +13,7 @@ import subprocess
 import requests
 import json
 import logging
+import gzip
 from typing import Optional, List, Dict, Any
 from time import sleep, time, strftime, gmtime
 from math import floor
@@ -37,6 +38,12 @@ GITHUB_HEADERS: Dict[str, str] = {
     "Time-Zone": "Europe/London",  # we convert everything to gmt -> no need to handle timezones
 }
 
+ALREADY_COMPRESSED_CONTENT_TYPES: List[str] = [
+    "application/gzip",
+    "application/octet-stream",
+    "application/zip",
+]
+
 
 class GithubRepoBackuper:
     def __init__(
@@ -48,6 +55,7 @@ class GithubRepoBackuper:
         include_lfs: bool = False,
         include_releases: bool = False,
         include_wiki: bool = False,
+        gzip: bool = False,
         last_backup: Optional[str] = None,
     ) -> None:
         assert repo_owner != "" and repo_name != ""
@@ -61,6 +69,7 @@ class GithubRepoBackuper:
         self._start_time: Optional[str] = None
         self._include_releases: bool = include_releases
         self._include_wiki: bool = include_wiki
+        self._gzip = gzip
 
         if path.exists(path.join("github", repo_owner, repo_name, "ghrb.json")):
             logger.debug("found existing ghrb.json")
@@ -133,8 +142,10 @@ class GithubRepoBackuper:
             if self._detailed_prs and output_issue["is_pull_request"]:
                 output_issue = {**output_issue, **_get_pr_details(issue.get("pull_request", {}).get("url"))}
 
-            with open(path.join("github", self._repo_owner, self._repo_name, "issues", f"{issue['number']}.json"), "w") as fp:
-                json.dump(output_issue, fp)
+            self.write_gzipable_json(
+                path.join("github", self._repo_owner, self._repo_name, "issues", f"{issue['number']}.json"),
+                output_issue,
+            )
             # TODO: save user info if new
 
     def _download_git(self, wiki: bool = False) -> None:
@@ -202,10 +213,22 @@ class GithubRepoBackuper:
                 ]
             }
             dir = path.join("github", self._repo_owner, self._repo_name, "releases", str(id))
-            with open(path.join(dir, "release.json"), "w") as fp:
-                json.dump(output_release, fp)
+            self.write_gzipable_json(path.join(dir, "release.json"), output_release)
             for asset in release.get("assets", []):
-                _download_file(asset["browser_download_url"], path.join(dir, asset["name"]))
+                gz: bool = self._gzip and asset["content_type"] not in ALREADY_COMPRESSED_CONTENT_TYPES
+                _download_file(
+                    asset["browser_download_url"],
+                    path.join(dir, f"{asset['name']}.gz" if gz else asset["name"]),
+                    gz
+                )
+
+    def write_gzipable_json(self, filepath: str, jsondata: Any) -> None:
+        if self._gzip:
+            with gzip.open(f"{filepath}.gz", "wt") as fp:
+                json.dump(jsondata, fp)
+        else:
+            with open(filepath, "w") as fp:
+                json.dump(jsondata, fp)
 
 
 def _get_pr_details(url: Optional[str]) -> Dict[str, Any]:
@@ -270,14 +293,23 @@ def _gh_get(url: str) -> requests.Response:
     return resp
 
 
-def _download_file(url: str, local_file: str) -> None:
+def _download_file(url: str, local_file: str, gzip_result: bool = False) -> None:
+    """
+    gzip_result will just gzip the result without questions.
+        change the filename and check for duplicate compression at the other end.
+    """
     # https://stackoverflow.com/a/16696317
     logger.debug(f"Downloading {url} to {local_file}")
     with requests.get(url, stream=True) as r:
         r.raise_for_status()  # TODO: handle
-        with open(local_file, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
+        if gzip_result:
+            with gzip.open(local_file, "wb") as fp:
+                for chunk in r.iter_content(chunk_size=8192):
+                    fp.write(chunk)
+        else:
+            with open(local_file, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
 
 
 def main() -> None:
@@ -292,6 +324,7 @@ def main() -> None:
     parser.add_argument("--include-lfs", action="store_true", help="Include git-lfs (requires git-lfs to be installed).")
     parser.add_argument("--include-releases", action="store_true", help="include github releases.")
     parser.add_argument("--include-wiki", action="store_true", help="include github wiki.")
+    parser.add_argument("--gzip", action="store_true", help="gzip files whereever possible to reduce filesize.")
     args = parser.parse_args()._get_kwargs()
     del parser
     logger.debug("arguments: " + "; ".join({f"{k}: {v}" for k, v in args}))
