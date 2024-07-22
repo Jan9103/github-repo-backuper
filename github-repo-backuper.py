@@ -208,10 +208,13 @@ class GithubRepoBackuper:
                         "content_type": asset.get("content_type"),
                         "download_count": asset.get("download_count"),
                         "name": asset.get("name"),
-                    } for asset in release.get("assets", [])
+                    } for asset in (release.get("assets") or [])
                 ]
             }
             dir = path.join("github", self._repo_owner, self._repo_name, "releases", str(id))
+            if path.exists(dir):
+                continue
+            makedirs(dir)
             self.write_gzipable_json(path.join(dir, "release.json"), output_release)
             for asset in release.get("assets", []):
                 gz: bool = self._gzip and asset["content_type"] not in ALREADY_COMPRESSED_CONTENT_TYPES
