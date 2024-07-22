@@ -43,6 +43,16 @@ ALREADY_COMPRESSED_CONTENT_TYPES: List[str] = [
     "application/octet-stream",
     "application/zip",
 ]
+ALREADY_COMPRESSED_FILE_EXTENSIONS: List[str] = [
+    "zip",
+    "gz",
+    "bz",
+    "jar",
+    "cbz",
+    "7z",
+    "rar",
+    "sitx",
+]
 
 
 class GithubRepoBackuper:
@@ -217,7 +227,11 @@ class GithubRepoBackuper:
             makedirs(dir)
             self.write_gzipable_json(path.join(dir, "release.json"), output_release)
             for asset in release.get("assets", []):
-                gz: bool = self._gzip and asset["content_type"] not in ALREADY_COMPRESSED_CONTENT_TYPES
+                gz: bool = (
+                    self._gzip
+                    and asset["content_type"] not in ALREADY_COMPRESSED_CONTENT_TYPES
+                    and asset['name'].rsplit(".", 1)[-1].lower() not in ALREADY_COMPRESSED_FILE_EXTENSIONS
+                )
                 _download_file(
                     asset["browser_download_url"],
                     path.join(dir, f"{asset['name']}.gz" if gz else asset["name"]),
