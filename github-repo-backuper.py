@@ -31,13 +31,6 @@ logger.addHandler(log_handler)
 del log_handler, log_formatter
 
 
-GITHUB_HEADERS: Dict[str, str] = {
-    "Accept": "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": f"Github-Repo-Backuper <https://github.com/Jan9103/github-repo-backuper> (python requests {requests.__version__})",
-    "Time-Zone": "Europe/London",  # we convert everything to gmt -> no need to handle timezones
-}
-
 ALREADY_COMPRESSED_CONTENT_TYPES: List[str] = [
     "application/gzip",
     "application/octet-stream",
@@ -65,7 +58,9 @@ class GithubRepoBackuper:
         include_lfs: bool = False,
         include_releases: bool = False,
         include_wiki: bool = False,
+        include_projects: bool = False,
         gzip: bool = False,
+        auth_token: Optional[str] = None,
         last_backup: Optional[str] = None,
     ) -> None:
         assert repo_owner != "" and repo_name != ""
@@ -79,7 +74,16 @@ class GithubRepoBackuper:
         self._start_time: Optional[str] = None
         self._include_releases: bool = include_releases
         self._include_wiki: bool = include_wiki
+        self._include_projects: bool = include_projects
         self._gzip = gzip
+        self._github_headers: Dict[str, str] = {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": f"Github-Repo-Backuper <https://github.com/Jan9103/github-repo-backuper> (python requests {requests.__version__})",
+            "Time-Zone": "Europe/London",  # we convert everything to gmt -> no need to handle timezones
+            **({"Authorization": f"Bearer {auth_token}"} if auth_token is not None else {}),
+        }
+
 
         if path.exists(path.join("github", repo_owner, repo_name, "ghrb.json")):
             logger.debug("found existing ghrb.json")
@@ -98,6 +102,8 @@ class GithubRepoBackuper:
             self._download_releases()
         if self._include_wiki:
             self._download_git(wiki=True)
+        if self._include_projects:
+            self._download_projects()
         with open(path.join("github", self._repo_owner, self._repo_name, "ghrb.json"), "w") as fp:
             json.dump({
                 "last_backup": self._start_time,
@@ -112,7 +118,7 @@ class GithubRepoBackuper:
             next += f"&since={self._last_backup}"
         next += "&state=all"  # open is default
         while next is not None:
-            resp: requests.Response = _gh_get(next)
+            resp: requests.Response = self._gh_get(next)
             resp.raise_for_status()  # TODO: handle
             self._save_issues(resp.json())
             next = None
@@ -141,7 +147,7 @@ class GithubRepoBackuper:
                 "state": issue.get("state"),
                 "title": issue.get("title"),
                 "user": issue.get("user", {}).get("login"),
-                "comments": (_get_issue_comments(issue.get("comments_url")) if (issue.get("comments") or 0) > 0 else []),
+                "comments": (self._get_issue_comments(issue.get("comments_url")) if (issue.get("comments") or 0) > 0 else []),
                 **({
                     "is_pull_request": True,
                     "merged_at": issue["pull_request"].get("merged_at"),
@@ -149,7 +155,7 @@ class GithubRepoBackuper:
             }
 
             if self._detailed_prs and output_issue["is_pull_request"]:
-                output_issue = {**output_issue, **_get_pr_details(issue.get("pull_request", {}).get("url"))}
+                output_issue = {**output_issue, **self._get_pr_details(issue.get("pull_request", {}).get("url"))}
 
             self.write_gzipable_json(
                 path.join("github", self._repo_owner, self._repo_name, "issues", f"{issue['number']}.json"),
@@ -189,7 +195,7 @@ class GithubRepoBackuper:
         # 100 per page is limit and the rate-limit counts requests, not requested data amount
         next: Optional[str] = f'https://api.github.com/repos/{self._repo_owner}/{self._repo_name}/releases?per_page=100'
         while next is not None:
-            resp: requests.Response = _gh_get(next)
+            resp: requests.Response = self._gh_get(next)
             resp.raise_for_status()  # TODO: handle
             self._save_releases(resp.json())
             next = None
@@ -224,7 +230,7 @@ class GithubRepoBackuper:
             dir = path.join("github", self._repo_owner, self._repo_name, "releases", str(id))
             if path.exists(dir):
                 continue
-            makedirs(dir)
+            makedirs(dir, exist_ok=True)
             self.write_gzipable_json(path.join(dir, "release.json"), output_release)
             for asset in release.get("assets", []):
                 gz: bool = (
@@ -238,6 +244,54 @@ class GithubRepoBackuper:
                     gz
                 )
 
+    def _download_projects(self) -> None:
+        response: requests.Response = self._gh_get(f"https://api.github.com/repos/{self._repo_owner}/{self._repo_name}/projects?per_page=100")
+        if response.status_code in (401, 410):
+            logger.warning("Failed to get repository projects (missing permission)")
+            return
+        if response.status_code == 404:
+            logger.warning("Failed to get repository projects (projects are disabled)")
+            return
+        response.raise_for_status()
+        response_json: Any = response.json()
+        assert isinstance(response_json, list), "Projects are not a list"
+        dir: str = path.join("github", self._repo_owner, self._repo_name, "projects")
+        makedirs(dir, exist_ok=True)
+        for project in response_json:
+            columns_response: requests.Response = self._gh_get(project["columns_url"])
+            columns_response.raise_for_status()
+            columns: List = columns_response.json()
+            assert isinstance(columns, list)
+            out_cols: List[Any] = []
+            for column in columns:
+                cards_response: requests.Response = self._gh_get(column["cards_url"])
+                cards_response.raise_for_status()
+                cards: List = cards_response.json()
+                assert isinstance(cards, list)
+                out_cols.append({
+                    "cards": [{
+                        "archived": card.get("archived"),
+                        "created_at": card.get("created_at"),
+                        "creator": (card.get("creator") or {}).get("login"),
+                        "id": card.get("id"),
+                        "note": card.get("note"),
+                        "updated_at": card.get("updated_at"),
+                    } for card in cards],
+                    "name": column.get("name"),
+                    "id": column.get("id"),
+                    "created_at": column.get("created_at"),
+                    "updated_at": column.get("updated_at"),
+                })
+            self.write_gzipable_json(path.join(dir, f"{project['id']}.json"), {
+                "name": project.get("name"),
+                "number": project.get("number"),
+                "state": project.get("state"),
+                "updated_at": project.get("updated_at"),
+                "body": project.get("body"),
+                "created_at": project.get("created_at"),
+                "creator": (project.get("creator") or {}).get("login"),
+            })
+
     def write_gzipable_json(self, filepath: str, jsondata: Any) -> None:
         if self._gzip:
             with gzip.open(f"{filepath}.gz", "wt") as fp:
@@ -246,42 +300,50 @@ class GithubRepoBackuper:
             with open(filepath, "w") as fp:
                 json.dump(jsondata, fp)
 
-
-def _get_pr_details(url: Optional[str]) -> Dict[str, Any]:
-    if url is None:
-        return {}
-    resp = _gh_get(url)
-    resp.raise_for_status()  # TODO: handle
-    pr = resp.json()
-    return {
-        "merge_commit_sha": pr.get("merge_commit_sha"),
-        "requested_reviewers": pr.get("requested_reviewers"),
-        "head": {
-            "gh_repo": ((pr.get("head") or {}).get("repo") or {}).get("full_name"),
-            "ref": (pr.get("head") or {}).get("ref"),
-        },
-        "base": (pr.get("base") or {}).get("ref"),
-        "merged": pr.get("merged"),
-        "merged_by": (pr.get("merged_by") or {}).get("login"),
-    }
+    def _gh_get(self, url: str) -> requests.Response:
+        logger.debug(f"HTTP GET {url}")
+        resp = requests.get(url, headers=self._github_headers)
+        _handle_ratelimit(resp)
+        return resp
 
 
-def _get_issue_comments(url: Optional[str]) -> List[Dict[str, Any]]:
-    if url is None:
-        return []
-    output: List[Dict[str, Any]] = []
-    resp = _gh_get(url)
-    resp.raise_for_status()  # TODO: handle
-    for comment in resp.json():
-        output.append({
-            "author_association": comment.get("author_association"),
-            "body": comment.get("body"),
-            "created_at": comment.get("created_at"),
-            "updated_at": comment.get("updated_at"),
-            "reactions": _prettify_reactions(comment.get("reactions")),
-            "user": (comment.get("user") or {}).get("login"),
-        })
-    return output
+
+
+    def _get_pr_details(self, url: Optional[str]) -> Dict[str, Any]:
+        if url is None:
+            return {}
+        resp = self._gh_get(url)
+        resp.raise_for_status()  # TODO: handle
+        pr = resp.json()
+        return {
+            "merge_commit_sha": pr.get("merge_commit_sha"),
+            "requested_reviewers": pr.get("requested_reviewers"),
+            "head": {
+                "gh_repo": ((pr.get("head") or {}).get("repo") or {}).get("full_name"),
+                "ref": (pr.get("head") or {}).get("ref"),
+            },
+            "base": (pr.get("base") or {}).get("ref"),
+            "merged": pr.get("merged"),
+            "merged_by": (pr.get("merged_by") or {}).get("login"),
+        }
+
+
+    def _get_issue_comments(self, url: Optional[str]) -> List[Dict[str, Any]]:
+        if url is None:
+            return []
+        output: List[Dict[str, Any]] = []
+        resp = self._gh_get(url)
+        resp.raise_for_status()  # TODO: handle
+        for comment in resp.json():
+            output.append({
+                "author_association": comment.get("author_association"),
+                "body": comment.get("body"),
+                "created_at": comment.get("created_at"),
+                "updated_at": comment.get("updated_at"),
+                "reactions": _prettify_reactions(comment.get("reactions")),
+                "user": (comment.get("user") or {}).get("login"),
+            })
+        return output
 
 
 def _prettify_reactions(reactions: Optional[Dict[str, Any]]) -> Dict[str, int]:
@@ -301,13 +363,6 @@ def _handle_ratelimit(resp: requests.Response) -> None:
 
 def _datetime_for_github() -> str:
     return strftime("%Y-%m-%dT%H:%M:%SZ", gmtime())
-
-
-def _gh_get(url: str) -> requests.Response:
-    logger.debug(f"HTTP GET {url}")
-    resp = requests.get(url, headers=GITHUB_HEADERS)
-    _handle_ratelimit(resp)
-    return resp
 
 
 def _download_file(url: str, local_file: str, gzip_result: bool = False) -> None:
@@ -341,7 +396,9 @@ def main() -> None:
     parser.add_argument("--include-lfs", action="store_true", help="Include git-lfs (requires git-lfs to be installed).")
     parser.add_argument("--include-releases", action="store_true", help="include github releases.")
     parser.add_argument("--include-wiki", action="store_true", help="include github wiki.")
+    parser.add_argument("--include-projects", action="store_true", help="include github-repo projects (usually requires auth-token even if its public).")
     parser.add_argument("--gzip", action="store_true", help="gzip files whereever possible to reduce filesize.")
+    parser.add_argument("--auth-token", type=str, help="GitHub auth token (note: classic tokens work with repos you dont own).")
     args = parser.parse_args()._get_kwargs()
     del parser
     logger.debug("arguments: " + "; ".join({f"{k}: {v}" for k, v in args}))
