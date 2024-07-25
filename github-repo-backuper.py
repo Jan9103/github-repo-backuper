@@ -47,6 +47,13 @@ ALREADY_COMPRESSED_FILE_EXTENSIONS: List[str] = [
     "sitx",
 ]
 
+GITHUB_HEADERS: Dict[str, str] = {
+    "Accept": "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": f"Github-Repo-Backuper <https://github.com/Jan9103/github-repo-backuper> (python requests {requests.__version__})",
+    "Time-Zone": "Europe/London",  # we convert everything to gmt -> no need to handle timezones
+}
+
 
 class GithubRepoBackuper:
     def __init__(
@@ -77,10 +84,7 @@ class GithubRepoBackuper:
         self._include_projects: bool = include_projects
         self._gzip = gzip
         self._github_headers: Dict[str, str] = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": f"Github-Repo-Backuper <https://github.com/Jan9103/github-repo-backuper> (python requests {requests.__version__})",
-            "Time-Zone": "Europe/London",  # we convert everything to gmt -> no need to handle timezones
+            **GITHUB_HEADERS,
             **({"Authorization": f"Bearer {auth_token}"} if auth_token is not None else {}),
         }
 
@@ -301,13 +305,7 @@ class GithubRepoBackuper:
                 json.dump(jsondata, fp)
 
     def _gh_get(self, url: str) -> requests.Response:
-        logger.debug(f"HTTP GET {url}")
-        resp = requests.get(url, headers=self._github_headers)
-        _handle_ratelimit(resp)
-        return resp
-
-
-
+        return _gh_get(url=url, headers=self._github_headers)
 
     def _get_pr_details(self, url: Optional[str]) -> Dict[str, Any]:
         if url is None:
@@ -344,6 +342,13 @@ class GithubRepoBackuper:
                 "user": (comment.get("user") or {}).get("login"),
             })
         return output
+
+
+def _gh_get(url: str, headers: Dict[str, str]) -> requests.Response:
+    logger.debug(f"HTTP GET {url}")
+    resp = requests.get(url, headers=headers)
+    _handle_ratelimit(resp)
+    return resp
 
 
 def _prettify_reactions(reactions: Optional[Dict[str, Any]]) -> Dict[str, int]:
@@ -390,7 +395,8 @@ def main() -> None:
         description="Back up a github repository",
     )
     parser.add_argument("repo_owner", help="Name of the repository owner. Example: torvalds")
-    parser.add_argument("repo_name", help="Name of the repository. Example: linux")
+    parser.add_argument("repo_name", help="Name of the repository. Example: linux", nargs='?', default=None)
+    parser.add_argument("--all-repos", action="store_true", help="Download all repos of the owner.")
     parser.add_argument("--prune", action="store_true", help="Prune the git repository if this is a increment.")
     parser.add_argument("--detailed-prs", action="store_true", help="Store detailed PR information.")
     parser.add_argument("--include-lfs", action="store_true", help="Include git-lfs (requires git-lfs to be installed).")
@@ -399,10 +405,22 @@ def main() -> None:
     parser.add_argument("--include-projects", action="store_true", help="include github-repo projects (usually requires auth-token even if its public).")
     parser.add_argument("--gzip", action="store_true", help="gzip files whereever possible to reduce filesize.")
     parser.add_argument("--auth-token", type=str, help="GitHub auth token (note: classic tokens work with repos you dont own).")
-    args = parser.parse_args()._get_kwargs()
+    args = parser.parse_args()
+    kwargs = args._get_kwargs()
     del parser
-    logger.debug("arguments: " + "; ".join({f"{k}: {v}" for k, v in args}))
-    GithubRepoBackuper(**{k: v for k, v in args}).start_backup()
+    logger.debug("arguments: " + "; ".join({f"{k}: {v}" for k, v in kwargs}))
+    if not args.all_repos and not args.repo_name:
+        print("either specify --all-repos or a repo_name")
+        return
+    if not args.all_repos:
+        GithubRepoBackuper(**{k: v for k, v in kwargs}).start_backup()
+        return
+    resp = _gh_get(f"https://api.github.com/users/{args.repo_owner}/repos", headers=GITHUB_HEADERS)
+    resp.raise_for_status()
+    logger.info(f"Found {len(resp_json := resp.json())} repositories in {args.repo_owner}")
+    for repo in resp_json:
+        logger.info(f"Starting work on {repo['name']}")
+        #GithubRepoBackuper(repo_name=repo["name"], **{k: v for k, v in kwargs if k != "repo_name"})
 
 
 if __name__ == "__main__":
