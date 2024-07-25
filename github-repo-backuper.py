@@ -420,7 +420,7 @@ def main() -> None:
     logger.info(f"Found {len(resp_json := resp.json())} repositories in {args.repo_owner}")
     for repo in resp_json:
         logger.info(f"Starting work on {repo['name']}")
-        #GithubRepoBackuper(repo_name=repo["name"], **{k: v for k, v in kwargs if k != "repo_name"})
+        GithubRepoBackuper(repo_name=repo["name"], **{k: v for k, v in kwargs if k != "repo_name"})
 
 
 if __name__ == "__main__":
