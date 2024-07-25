@@ -17,7 +17,7 @@ import gzip
 from typing import Optional, List, Dict, Any
 from time import sleep, time, strftime, gmtime
 from math import floor
-from os import makedirs, path
+from os import makedirs, path, environ
 from sys import stdout
 
 
@@ -88,7 +88,7 @@ class GithubRepoBackuper:
             **GITHUB_HEADERS,
             **({"Authorization": f"Bearer {auth_token}"} if auth_token is not None else {}),
         }
-
+        environ["GIT_TERMINAL_PROMPT"] = "0"
 
         if path.exists(path.join("github", repo_owner, repo_name, "ghrb.json")):
             logger.debug("found existing ghrb.json")
