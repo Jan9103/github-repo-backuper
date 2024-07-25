@@ -397,6 +397,7 @@ def main() -> None:
     parser.add_argument("repo_owner", help="Name of the repository owner. Example: torvalds")
     parser.add_argument("repo_name", help="Name of the repository. Example: linux", nargs='?', default=None)
     parser.add_argument("--all-repos", action="store_true", help="Download all repos of the owner.")
+    parser.add_argument("--include-forks", action="store_true", help="(for --all-repos)")
     parser.add_argument("--prune", action="store_true", help="Prune the git repository if this is a increment.")
     parser.add_argument("--detailed-prs", action="store_true", help="Store detailed PR information.")
     parser.add_argument("--include-lfs", action="store_true", help="Include git-lfs (requires git-lfs to be installed).")
@@ -419,6 +420,9 @@ def main() -> None:
     resp.raise_for_status()
     logger.info(f"Found {len(resp_json := resp.json())} repositories in {args.repo_owner}")
     for repo in resp_json:
+        if repo["fork"] == True and not args.include_forks:
+            logger.info(f"Skipped {repo['name']} since its a fork")
+            continue
         logger.info(f"Starting work on {repo['name']}")
         GithubRepoBackuper(repo_name=repo["name"], **{k: v for k, v in kwargs if k != "repo_name"})
 
