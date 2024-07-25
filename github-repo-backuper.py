@@ -69,6 +69,7 @@ class GithubRepoBackuper:
         gzip: bool = False,
         auth_token: Optional[str] = None,
         last_backup: Optional[str] = None,
+        **_,
     ) -> None:
         assert repo_owner != "" and repo_name != ""
         logger.debug(f"created GithubRepoBackuper for {repo_owner}/{repo_name}")
@@ -424,7 +425,7 @@ def main() -> None:
             logger.info(f"Skipped {repo['name']} since its a fork")
             continue
         logger.info(f"Starting work on {repo['name']}")
-        GithubRepoBackuper(repo_name=repo["name"], **{k: v for k, v in kwargs if k != "repo_name"})
+        GithubRepoBackuper(repo_name=repo["name"], **{k: v for k, v in kwargs if k != "repo_name"}).start_backup()
 
 
 if __name__ == "__main__":
