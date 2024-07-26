@@ -1,0 +1,7 @@
+{
+    "name": "github-repo-backuper",
+    "linkin": {
+        "webserver/mod.nu:nulib/webserver.nu": {"name": "webserver.nu", "source_uri": "https://github.com/jan9103/webserver.nu"},
+        "nutils:nulib/nutils": {"name": "nutils", "source_uri": "https://github.com/jan9103/nutils"}
+    }
+}
