@@ -118,8 +118,12 @@ def generate_issue_list [req]: nothing -> string {
         $'<td>(if $data.state? == "closed" {"🟣"} else {"🟢"})</td>'
         $'<td>(html escape ($data.title? | default "<no title>"))'
         ($data.labels? | default [] | each {|label|
-          let fc = (if (isDarkColor ($label.color? | default '0a0')) {"fff"} else {"000"})
-          $'<span class="label" style="background-color:#(html escape ($label.color? | default '0a0')); color:#($fc)">(html escape ($label.name? | default ""))</span>'
+          if ($label | describe) == "string" {
+            $'<span class="label" style="background-color:#00ff00">(html escape $label)</span>'
+          } else {
+            let fc = (if (isDarkColor ($label.color? | default '0a0')) {"fff"} else {"000"})
+            $'<span class="label" style="background-color:#(html escape ($label.color? | default '0a0')); color:#($fc)">(html escape ($label.name? | default ""))</span>'
+          }
         } | str join '')
         '</td>'
         $'<td>(html escape ($data.user? | default "<no author>"))</td>'
@@ -146,8 +150,12 @@ def generate_issue_details [req]: nothing -> string {
     $'<h1>/<a href="/github">github</a>/<a href="/github/(html escape $rp.user)">(html escape $rp.user)</a>/<a href="/github/(html escape $rp.user)/(html escape $rp.repo)">(html escape $rp.repo)</a>/<a href="/github/(html escape $rp.user)/(html escape $rp.repo)/issues">issues</a>/($rp.issue)</h1>'
     $'<h2>(html escape ($data.title? | default "<no name>"))</h2>'
     ($data.labels? | default [] | each {|label|
-      let fc = (if (isDarkColor ($label.color? | default '0a0')) {"fff"} else {"000"})
-      $'<span class="label" style="background-color:#(html escape ($label.color? | default '0a0')); color:#($fc)">(html escape ($label.name? | default ""))</span>'
+      if ($label | describe) == "string" {
+        $'<span class="label" style="background-color:#00ff00">(html escape $label)</span>'
+      } else {
+        let fc = (if (isDarkColor ($label.color? | default '0a0')) {"fff"} else {"000"})
+        $'<span class="label" style="background-color:#(html escape ($label.color? | default '0a0')); color:#($fc)">(html escape ($label.name? | default ""))</span>'
+      }
     } | str join '')
     $'<p>Author: (format_username $data.user? $data.author_association?)</p>'
     (if $data.draft? == true {"<p>This is a draft</p>"} else {""})
