@@ -163,6 +163,12 @@ def generate_issue_details [req]: nothing -> string {
     (if $data.state? != null {$"<p>State: (html escape $data.state)</p>"})
     (if ($data.assignees? | default []) != [] {$'<p>Assignees: (html escape ($data.assignees? | default [] | get login | str join ", "))</p>'} else {""})
 
+    # MR data
+    # TODO: requested reviewers
+    (if $data.merge_commit_sha? != null {$'<p>Merge Commit SHA: (html escape $data.merge_commit_sha)</p>'} else {''})
+    (if $data.head? != null {$'<p>FROM <code>(html escape ($data.head.gh_repo? | default "<unknown repo>")):(html escape ($data.head.ref? | default "<unknown ref>"))</code> TO <code>(html escape ($data.base? | default "<unknown target branch>"))</code></p>'})
+    (if $data.merged? == true {$'<p>Merged at (html escape ($data.merged_at? | default "<unknown>")) by (html escape ($data.merged_by? | default "<unknown>"))</p>'})
+
     $'<pre>(html escape ($data.body? | default "<no body>"))</pre>'
 
     $'created: (html escape ($data.created_at? | default "<unknown>")) updated: (html escape ($data.updated_at? | default "<unknown>"))'

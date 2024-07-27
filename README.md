@@ -50,6 +50,8 @@ This repo also includes a webui for viewing (and maybe in the future starting) b
 * [ ] Repo-Project viewer
 * [ ] Discussion list
 * [ ] Discussion details
+* [ ] View commit diffs
+* [ ] View commit history
 
 ### Usage:
 
