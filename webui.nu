@@ -83,7 +83,7 @@ def generate_repopage [req]: nothing -> string {
 
     $'<a href="(html escape $req.path)/issues">Issues</a>'
 
-    (if $readme_name != "" {$'<h2>(html escape $readme_name)</h2><details><summary>toggle</summary><pre>(html escape (^git show -q $"HEAD:($readme_name)"))</pre></details>'} else {""})
+    (if $readme_name != null {$'<h2>(html escape $readme_name)</h2><details><summary>toggle</summary><pre>(html escape (^git show -q $"HEAD:($readme_name)"))</pre></details>'} else {""})
 
     $'<h2>Files</h2><details><summary>toggle</summary><ul>'
     ($files | each {|i| $'<li>(html escape $i)</li>'} | str join '')  # TODO: replace with line below once file-viewer (incl images?) is implemented
