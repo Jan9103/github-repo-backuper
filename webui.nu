@@ -149,7 +149,7 @@ def generate_issue_details [req]: nothing -> string {
       let fc = (if (isDarkColor ($label.color? | default '0a0')) {"fff"} else {"000"})
       $'<span class="label" style="background-color:#(html escape ($label.color? | default '0a0')); color:#($fc)">(html escape ($label.name? | default ""))</span>'
     } | str join '')
-    $'<p>Author: (html escape ($data.user? | default "<no user>")) (html escape ($data.author_association? | default ""))</p>'
+    $'<p>Author: (format_username $data.user? $data.author_association?)</p>'
     (if $data.draft? == true {"<p>This is a draft</p>"} else {""})
     (if $data.locked? == true {"<p>This is locked</p>"} else {""})
     (if $data.state? != null {$"<p>State: (html escape $data.state)</p>"})
@@ -165,7 +165,7 @@ def generate_issue_details [req]: nothing -> string {
     ($data.comments? | default [] | each {|comment|
       [
         '<div class="comment">'
-        $'<b>(html escape ($comment.user? | default "<unknown user>")) (html escape ($comment.author_association? | default ""))</b>'
+        $'<b>(format_username $comment.user? $comment.author_association?)</b>'
         $'<pre>(html escape ($comment.body? | default "<no body>"))</pre>'
         $'created: (html escape ($comment.created_at? | default "<unknown>")) updated: (html escape ($comment.updated_at? | default "<unknown>"))'
         (format_reactions $comment.reactions?)
@@ -202,6 +202,10 @@ def format_reactions [reactions] {
     )
     '</div>'
   ] | str join ''
+}
+def format_username [name, association]: nothing -> string {
+  if $association in [null, "NONE"] {return (html escape ($name | default "<no name>"))}
+  $'(html escape ($name | default "<no name>")) [(html escape $association)]'
 }
 
 def isDarkColor [color: string] {
