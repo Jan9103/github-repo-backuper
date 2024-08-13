@@ -14,7 +14,7 @@ import requests
 import json
 import logging
 import gzip
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Generator
 from time import sleep, time, strftime, gmtime
 from math import floor
 from os import makedirs, path, environ
@@ -117,26 +117,11 @@ class GithubRepoBackuper:
     def _download_issues(self) -> None:
         logger.info("Starting issue backuper")
         makedirs(path.join("github", self._repo_owner, self._repo_name, "issues"), exist_ok=True)
-        # 100 per page is limit and the rate-limit counts requests, not requested data amount
         next: Optional[str] = f'https://api.github.com/repos/{self._repo_owner}/{self._repo_name}/issues?per_page=100'
         if self._last_backup is not None:
             next += f"&since={self._last_backup}"
         next += "&state=all"  # open is default
-        while next is not None:
-            resp: requests.Response = self._gh_get(next)
-            resp.raise_for_status()  # TODO: handle
-            self._save_issues(resp.json())
-            next = None
-            try:
-                for link_str in resp.headers["Link"].split(", "):
-                    url, rel = link_str.split("; rel=", 1)
-                    if rel == '"next"':
-                        next = url[1:-1]  # cut < and >
-            except Exception:  # key error, not a string, etc -> does not contain next
-                return
-
-    def _save_issues(self, parsed_json: List[Dict[str, Any]]) -> None:
-        for issue in parsed_json:
+        for issue in self._gh_paginated(next):
             logger.debug(f"found issue: {issue['number']}")
             output_issue: Dict[str, Any] = {
                 "active_lock_reason": issue.get("active_lock_reason"),
@@ -198,22 +183,7 @@ class GithubRepoBackuper:
         logger.info("Downloading releases")
         makedirs(path.join("github", self._repo_owner, self._repo_name, "releases"), exist_ok=True)
         # 100 per page is limit and the rate-limit counts requests, not requested data amount
-        next: Optional[str] = f'https://api.github.com/repos/{self._repo_owner}/{self._repo_name}/releases?per_page=100'
-        while next is not None:
-            resp: requests.Response = self._gh_get(next)
-            resp.raise_for_status()  # TODO: handle
-            self._save_releases(resp.json())
-            next = None
-            try:
-                for link_str in resp.headers["Link"].split(", "):
-                    url, rel = link_str.split("; rel=", 1)
-                    if rel == '"next"':
-                        next = url[1:-1]  # cut < and >
-            except Exception:  # key error, not a string, etc -> does not contain next
-                return
-
-    def _save_releases(self, response_json: Any) -> None:
-        for release in response_json:
+        for release in self._gh_paginated(f'https://api.github.com/repos/{self._repo_owner}/{self._repo_name}/releases?per_page=100'):
             id: int = release["id"]
             output_release: Dict[str, Any] = {
                 "tag_name": release.get("tag_name"),
@@ -308,6 +278,9 @@ class GithubRepoBackuper:
     def _gh_get(self, url: str) -> requests.Response:
         return _gh_get(url=url, headers=self._github_headers)
 
+    def _gh_paginated(self, initial_url: str) -> Generator[str, None, None]:
+        yield from _gh_paginated(initial_url, headers=self._github_headers)
+
     def _get_pr_details(self, url: Optional[str]) -> Dict[str, Any]:
         if url is None:
             return {}
@@ -388,6 +361,22 @@ def _download_file(url: str, local_file: str, gzip_result: bool = False) -> None
             with open(local_file, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
+
+
+def _gh_paginated(initial_url: str, headers: Dict[str, str]) -> Generator[str, None, None]:
+    next: Optional[str] = initial_url
+    while next is not None:
+        resp: requests.Response = self._gh_get(next, headers=headers)
+        resp.raise_for_status()
+        yield from resp.json()
+        next = None
+        try:
+            for link_str in resp.headers["Link"].split(", "):
+                url, rel = link_str.split("; rel=", 1)
+                if rel == '"next"':
+                    next = url[1:-1]  # cut < and >
+        except Exception:  # key error, not a string, etc -> does not contain next
+            return
 
 
 def main() -> None:
