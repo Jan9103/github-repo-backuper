@@ -44,7 +44,9 @@ This repo also includes a webui for viewing (and maybe in the future starting) b
 * [x] Repo overview (README, filelist)
 * [x] Issue/PR list (with state, name, label, author, and comment-count)
 * [x] Issue/PR detail view (with name, author, labels, assignees, description, reactions, comments, state, lock-state, etc)
-* [ ] Release list
+* [x] Release list
+* [x] Release details
+* [ ] Release asset download
 * [ ] File explorer
 * [ ] Wiki viewer
 * [ ] Repo-Project viewer

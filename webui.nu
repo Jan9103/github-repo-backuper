@@ -33,7 +33,9 @@ def main [
     if $req.path =~ "^/github/[^/]+$" {return (generate_userpage $req)}
     if $req.path =~ "^/github/[^/]+/[^/]+$" {return (generate_repopage $req)}
     if $req.path =~ "^/github/[^/]+/[^/]+/issues$" {return (generate_issue_list $req)}
-    if $req.path =~ '^/github/[^/]+/[^/]+/issues/[^/]+$' {return (generate_issue_details $req)}
+    if $req.path =~ '^/github/[^/]+/[^/]+/issues/\d+$' {return (generate_issue_details $req)}
+    if $req.path =~ "^/github/[^/]+/[^/]+/releases$" {return (generate_release_list_page $req)}
+    if $req.path =~ '^/github/[^/]+/[^/]+/releases/\d+$' {return (generate_release_details_page $req)}
     format_http 404 $HTML ([$HTML_HEAD '<h1>Page not found</h1><a href="/github">Go Home</a>' $HTML_TAIL] | str join '')
   }
 }
@@ -81,7 +83,8 @@ def generate_repopage [req]: nothing -> string {
     $HTML_HEAD
     $'<h1>/<a href="/github">github</a>/<a href="/github/(html escape $rp.user)">(html escape $rp.user)</a>/(html escape $rp.repo)</h1>'
 
-    $'<a href="(html escape $req.path)/issues">Issues</a>'
+    (if ("../issues" | path exists) {$'<a href="(html escape $req.path)/issues">Issues</a> '})
+    (if ("../releases" | path exists) {$'<a href="(html escape $req.path)/releases">Releases</a> '})
 
     (if $readme_name != null {$'<h2>(html escape $readme_name)</h2><details><summary>toggle</summary><pre>(html escape (^git show -q $"HEAD:($readme_name)"))</pre></details>'} else {""})
 
@@ -192,6 +195,70 @@ def generate_issue_details [req]: nothing -> string {
   ] | str join "")
 }
 
+def generate_release_list_page [req]: nothing -> string {
+  let rp = ($req.path | parse "/github/{user}/{repo}/releases").0
+  if $rp.user !~ "^[a-zA-Z0-9_]+$" {return (format_http 300 $HTML "Invalid user name")}
+  if $rp.repo in ["..", "."] {return (format_http 300 $HTML "Invalid repo name")}  # "/" is already filter by mapper
+  if (not ($"github/($rp.user)/($rp.repo)/releases" | path exists)) {return (format_http 404 "text/plain;charset=utf-8" $"Repo has no releases or does not exist")}
+  cd $'github/($rp.user)/($rp.repo)/releases'
+
+  format_http 200 $HTML ([
+    $HTML_HEAD
+    $'<h1>/<a href="/github">github</a>/<a href="/github/(html escape $rp.user)">(html escape $rp.user)</a>/<a href="/github/(html escape $rp.user)/(html escape $rp.repo)">(html escape $rp.repo)</a>/releases</h1>'
+    '<ul>'
+    ((ls --short-names).name | each {|release_id|
+      let details_file = (if ($'($release_id)/release.json' | path exists) {$'($release_id)/release.json'} else {$'($release_id)/release.json.gz'})
+      let data = (if ($details_file | str ends-with ".json.gz") {^gunzip -kc $details_file | from json} else if ($details_file | str ends-with ".json") {open $details_file} else {null})
+
+      [
+        $'<li><a href="(html escape $req.path)/($release_id)">'
+        (if $data.is_draft {html escape '<DRAFT>'} else {''})
+        (if $data.is_prerelease {html escape '<PRERELEASE>'} else {''})
+        (html escape $data.name)
+        '</a></li>'
+      ] | str join ''
+    } | str join '')
+    '</ul>'
+    $HTML_TAIL
+  ] | str join '')
+}
+
+def generate_release_details_page [req]: nothing -> string {
+  let rp = ($req.path | parse "/github/{user}/{repo}/releases/{id}").0
+  if $rp.user !~ "^[a-zA-Z0-9_]+$" {return (format_http 300 $HTML "Invalid user name")}
+  if $rp.repo in ["..", "."] {return (format_http 300 $HTML "Invalid repo name")}  # "/" is already filter by mapper
+  if $rp.id !~ '^\d+$' {return (format_http 300 $HTML "Invalid release id (not a number)")}
+  if (not ($"github/($rp.user)/($rp.repo)/releases" | path exists)) {return (format_http 404 "text/plain;charset=utf-8" $"Repo has no releases or does not exist")}
+  let release_file = (if ($'github/($rp.user)/($rp.repo)/releases/($rp.id).json' | path exists) {$'github/($rp.user)/($rp.repo)/releases/($rp.id)/release.json'} else {$'github/($rp.user)/($rp.repo)/releases/($rp.id)/release.json.gz'})
+  if (not ($release_file | path exists)) {return (format_http 404 "text/plain;charset=utf-8" $"Unknown release")}
+  let data = (if ($release_file | str ends-with ".json.gz") {^gunzip -kc $release_file | from json} else if ($release_file | str ends-with ".json") {open $release_file} else {null})
+
+  format_http 200 $HTML ([
+    $HTML_HEAD
+    $'<h1>/<a href="/github">github</a>/<a href="/github/(html escape $rp.user)">(html escape $rp.user)</a>/<a href="/github/(html escape $rp.user)/(html escape $rp.repo)">(html escape $rp.repo)</a>/<a href="(html escape $rp.user)/(html escape $rp.repo)/releases">releases</a>/(html escape $rp.id)</h1>'
+
+    '<h2>'
+    (if $data.is_draft {html escape '<DRAFT>'} else {''})
+    (if $data.is_prerelease {html escape '<PRERELEASE>'} else {''})
+    (html escape $data.name)
+    '</h2>'
+
+    (if ("created_at" in $data) {$' created at (html escape $data.created_at)'} else {''})
+    (if ("published_at" in $data) {$' published at (html escape $data.published_at)'} else {''})
+    (if ("body" in $data) {$'<pre>(html escape $data.body)</pre>'} else {''})
+    (if ("reactions" in $data) {format_reactions $data.reactions} else {''})
+
+    (if ("assets" in $data) {[
+      '<h3>Assets</h3><table>'
+      ($data.assets | each {|asset|
+        $'<tr><td>💾($asset.download_count)</td><td>(html escape $asset.name)</td></tr>'
+      } | str join '')
+      '</table>'
+    ] | str join ''} else {})
+
+    $HTML_TAIL
+  ] | str join '')
+}
 
 const REACTION_NAME_TO_EMOTE = {
   # https://docs.github.com/en/rest/reactions/reactions
