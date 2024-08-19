@@ -117,7 +117,7 @@ class GithubRepoBackuper:
     def _download_issues(self) -> None:
         logger.info("Starting issue backuper")
         makedirs(path.join("github", self._repo_owner, self._repo_name, "issues"), exist_ok=True)
-        next: Optional[str] = f'https://api.github.com/repos/{self._repo_owner}/{self._repo_name}/issues?per_page=100'
+        next: str = f'https://api.github.com/repos/{self._repo_owner}/{self._repo_name}/issues?per_page=100'
         if self._last_backup is not None:
             next += f"&since={self._last_backup}"
         next += "&state=all"  # open is default
@@ -278,7 +278,7 @@ class GithubRepoBackuper:
     def _gh_get(self, url: str) -> requests.Response:
         return _gh_get(url=url, headers=self._github_headers)
 
-    def _gh_paginated(self, initial_url: str) -> Generator[str, None, None]:
+    def _gh_paginated(self, initial_url: str) -> Generator[Any, None, None]:
         yield from _gh_paginated(initial_url, headers=self._github_headers)
 
     def _get_pr_details(self, url: Optional[str]) -> Dict[str, Any]:
@@ -366,7 +366,7 @@ def _download_file(url: str, local_file: str, gzip_result: bool = False) -> None
 def _gh_paginated(initial_url: str, headers: Dict[str, str]) -> Generator[str, None, None]:
     next: Optional[str] = initial_url
     while next is not None:
-        resp: requests.Response = self._gh_get(next, headers=headers)
+        resp: requests.Response = _gh_get(next, headers=headers)
         resp.raise_for_status()
         yield from resp.json()
         next = None
