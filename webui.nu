@@ -56,7 +56,7 @@ def generate_landingpage []: nothing -> string {
 
 def generate_userpage [req]: nothing -> string {
   let user = ($req.path | parse "/github/{user}").0.user
-  if $user !~ "^[a-zA-Z0-9_]+$" {return (format_http 300 $HTML "Invalid user name")}
+  if $user !~ "^[a-zA-Z0-9_-]+$" {return (format_http 300 $HTML "Invalid user name")}
   if (not ($'github/($user)' | path exists)) {return (format_http 404 $HTML "User not found")}
   format_http 200 $HTML ([
     $HTML_HEAD
@@ -70,7 +70,7 @@ def generate_userpage [req]: nothing -> string {
 
 def generate_repopage [req]: nothing -> string {
   let rp = ($req.path | parse "/github/{user}/{repo}").0
-  if $rp.user !~ "^[a-zA-Z0-9_]+$" {return (format_http 300 $HTML "Invalid user name")}
+  if $rp.user !~ "^[a-zA-Z0-9_-]+$" {return (format_http 300 $HTML "Invalid user name")}
   if $rp.repo in ["..", "."] {return (format_http 300 $HTML "Invalid repo name")}  # "/" is already filter by mapper
   if (not ($'github/($rp.user)/($rp.repo)/git' | path exists)) {return (format_http 404 $HTML "Repo not found")}
 
@@ -101,7 +101,7 @@ def generate_repopage [req]: nothing -> string {
 
 def generate_issue_list [req]: nothing -> string {
   let rp = ($req.path | parse "/github/{user}/{repo}/issues").0
-  if $rp.user !~ "^[a-zA-Z0-9_]+$" {return (format_http 300 $HTML "Invalid user name")}
+  if $rp.user !~ "^[a-zA-Z0-9_-]+$" {return (format_http 300 $HTML "Invalid user name")}
   if $rp.repo in ["..", "."] {return (format_http 300 $HTML "Invalid repo name")}  # "/" is already filter by mapper
 
   if (not ($'github/($rp.user)/($rp.repo)/issues' | path exists)) {return (format_http 404 "text/plain;charset=utf-8" $"dir not found: github/($rp.user)/($rp.repo)/issues")}
@@ -141,7 +141,7 @@ def generate_issue_list [req]: nothing -> string {
 
 def generate_issue_details [req]: nothing -> string {
   let rp = ($req.path | parse "/github/{user}/{repo}/issues/{issue}").0
-  if $rp.user !~ "^[a-zA-Z0-9_]+$" {return (format_http 300 $HTML "Invalid user name")}
+  if $rp.user !~ "^[a-zA-Z0-9_-]+$" {return (format_http 300 $HTML "Invalid user name")}
   if $rp.repo in ["..", "."] {return (format_http 300 $HTML "Invalid repo name")}  # "/" is already filter by mapper
   if $rp.issue !~ '^\d+$' {return (format_http 300 $HTML "Invalid issue id (not a number)")}
   let issue_file = (if ($'github/($rp.user)/($rp.repo)/issues/($rp.issue).json' | path exists) {$'github/($rp.user)/($rp.repo)/issues/($rp.issue).json'} else {$'github/($rp.user)/($rp.repo)/issues/($rp.issue).json.gz'})
@@ -197,7 +197,7 @@ def generate_issue_details [req]: nothing -> string {
 
 def generate_release_list_page [req]: nothing -> string {
   let rp = ($req.path | parse "/github/{user}/{repo}/releases").0
-  if $rp.user !~ "^[a-zA-Z0-9_]+$" {return (format_http 300 $HTML "Invalid user name")}
+  if $rp.user !~ "^[a-zA-Z0-9_-]+$" {return (format_http 300 $HTML "Invalid user name")}
   if $rp.repo in ["..", "."] {return (format_http 300 $HTML "Invalid repo name")}  # "/" is already filter by mapper
   if (not ($"github/($rp.user)/($rp.repo)/releases" | path exists)) {return (format_http 404 "text/plain;charset=utf-8" $"Repo has no releases or does not exist")}
   cd $'github/($rp.user)/($rp.repo)/releases'
@@ -225,7 +225,7 @@ def generate_release_list_page [req]: nothing -> string {
 
 def generate_release_details_page [req]: nothing -> string {
   let rp = ($req.path | parse "/github/{user}/{repo}/releases/{id}").0
-  if $rp.user !~ "^[a-zA-Z0-9_]+$" {return (format_http 300 $HTML "Invalid user name")}
+  if $rp.user !~ "^[a-zA-Z0-9_-]+$" {return (format_http 300 $HTML "Invalid user name")}
   if $rp.repo in ["..", "."] {return (format_http 300 $HTML "Invalid repo name")}  # "/" is already filter by mapper
   if $rp.id !~ '^\d+$' {return (format_http 300 $HTML "Invalid release id (not a number)")}
   if (not ($"github/($rp.user)/($rp.repo)/releases" | path exists)) {return (format_http 404 "text/plain;charset=utf-8" $"Repo has no releases or does not exist")}
