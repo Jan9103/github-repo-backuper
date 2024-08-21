@@ -35,6 +35,9 @@ python3 github-repo-backuper.py --help
 python3 github-repo-backuper.py jan9103 github-repo-backuper
 ```
 
+**Notice:** The github-API ratelimit seems to be IP-based and using it up might cause
+other programs, such as GE-proton download-tools, to temporarely fail.
+
 ## Webui
 
 This repo also includes a webui for viewing (and maybe in the future starting) backups.
