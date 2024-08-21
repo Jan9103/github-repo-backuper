@@ -319,10 +319,17 @@ class GithubRepoBackuper:
 
 
 def _gh_get(url: str, headers: Dict[str, str]) -> requests.Response:
-    logger.debug(f"HTTP GET {url}")
-    resp = requests.get(url, headers=headers)
-    _handle_ratelimit(resp)
-    return resp
+    while True:
+        logger.debug(f"HTTP GET {url}")
+        resp = requests.get(url, headers=headers)
+        if resp.headers["X-RateLimit-Remaining"] == "0":
+            # +10 in case the local clock is off by something
+            sleep_seconds: int = int(resp.headers["X-RateLimit-Reset"]) - floor(time()) + 10
+            logger.info(f"Hit ratelimet. waiting for reset (~{sleep_seconds // 60}mins)..")
+            sleep(sleep_seconds)
+            if resp.status_code in (403, 428):  # exceeded -> data is garbage (otherwise just reached)
+                continue
+        return resp
 
 
 def _prettify_reactions(reactions: Optional[Dict[str, Any]]) -> Dict[str, int]:
@@ -330,14 +337,6 @@ def _prettify_reactions(reactions: Optional[Dict[str, Any]]) -> Dict[str, int]:
     if not isinstance(reactions, dict):
         return {}
     return {k: v for k, v in reactions.items() if isinstance(v, int) and k != "total_count" and v > 0}
-
-
-def _handle_ratelimit(resp: requests.Response) -> None:
-    if resp.headers["X-RateLimit-Remaining"] == "0":
-        # +10 in case the local clock is off by something
-        sleep_seconds: int = int(resp.headers["X-RateLimit-Reset"]) - floor(time()) + 10
-        logger.info(f"Hit ratelimet. waiting for reset (~{sleep_seconds // 60}mins)..")
-        sleep(sleep_seconds)
 
 
 def _datetime_for_github() -> str:
@@ -363,7 +362,7 @@ def _download_file(url: str, local_file: str, gzip_result: bool = False) -> None
                     f.write(chunk)
 
 
-def _gh_paginated(initial_url: str, headers: Dict[str, str]) -> Generator[str, None, None]:
+def _gh_paginated(initial_url: str, headers: Dict[str, str]) -> Generator[Any, None, None]:
     next: Optional[str] = initial_url
     while next is not None:
         resp: requests.Response = _gh_get(next, headers=headers)
