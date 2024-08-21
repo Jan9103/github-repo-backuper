@@ -69,6 +69,7 @@ class GithubRepoBackuper:
         gzip: bool = False,
         auth_token: Optional[str] = None,
         last_backup: Optional[str] = None,
+        reserve_rate_limit: Optional[int] = None,
         **_,
     ) -> None:
         assert repo_owner != "" and repo_name != ""
@@ -83,6 +84,7 @@ class GithubRepoBackuper:
         self._include_releases: bool = include_releases
         self._include_wiki: bool = include_wiki
         self._include_projects: bool = include_projects
+        self._reserve_rate_limit: int = max(reserve_rate_limit or 0, 0)
         self._gzip = gzip
         self._github_headers: Dict[str, str] = {
             **GITHUB_HEADERS,
@@ -276,10 +278,10 @@ class GithubRepoBackuper:
                 json.dump(jsondata, fp)
 
     def _gh_get(self, url: str) -> requests.Response:
-        return _gh_get(url=url, headers=self._github_headers)
+        return _gh_get(url=url, headers=self._github_headers, reserve_rate_limit=self._reserve_rate_limit)
 
     def _gh_paginated(self, initial_url: str) -> Generator[Any, None, None]:
-        yield from _gh_paginated(initial_url, headers=self._github_headers)
+        yield from _gh_paginated(initial_url, headers=self._github_headers, reserve_rate_limit=self._reserve_rate_limit)
 
     def _get_pr_details(self, url: Optional[str]) -> Dict[str, Any]:
         if url is None:
@@ -318,11 +320,11 @@ class GithubRepoBackuper:
         return output
 
 
-def _gh_get(url: str, headers: Dict[str, str]) -> requests.Response:
+def _gh_get(url: str, headers: Dict[str, str], reserve_rate_limit: int = 0) -> requests.Response:
     while True:
         logger.debug(f"HTTP GET {url}")
         resp = requests.get(url, headers=headers)
-        if resp.headers["X-RateLimit-Remaining"] == "0":
+        if int(resp.headers["X-RateLimit-Remaining"] or "0") <= reserve_rate_limit:
             # +10 in case the local clock is off by something
             sleep_seconds: int = int(resp.headers["X-RateLimit-Reset"]) - floor(time()) + 10
             logger.info(f"Hit ratelimet. waiting for reset (~{sleep_seconds // 60}mins)..")
@@ -362,10 +364,10 @@ def _download_file(url: str, local_file: str, gzip_result: bool = False) -> None
                     f.write(chunk)
 
 
-def _gh_paginated(initial_url: str, headers: Dict[str, str]) -> Generator[Any, None, None]:
+def _gh_paginated(initial_url: str, headers: Dict[str, str], reserve_rate_limit: int = 0) -> Generator[Any, None, None]:
     next: Optional[str] = initial_url
     while next is not None:
-        resp: requests.Response = _gh_get(next, headers=headers)
+        resp: requests.Response = _gh_get(next, headers=headers, reserve_rate_limit=reserve_rate_limit)
         resp.raise_for_status()
         yield from resp.json()
         next = None
@@ -395,6 +397,7 @@ def main() -> None:
     parser.add_argument("--include-projects", action="store_true", help="include github-repo projects (usually requires auth-token even if its public).")
     parser.add_argument("--gzip", action="store_true", help="gzip files whereever possible to reduce filesize.")
     parser.add_argument("--auth-token", type=str, help="GitHub auth token (note: classic tokens work with repos you dont own).")
+    parser.add_argument("--reserve-rate-limit", type=int, help="Reserve some rate-limit space for other programs and pause when only X requests remain.", default=0)
     args = parser.parse_args()
     kwargs = args._get_kwargs()
     del parser
@@ -405,7 +408,7 @@ def main() -> None:
     if not args.all_repos:
         GithubRepoBackuper(**{k: v for k, v in kwargs}).start_backup()
         return
-    resp = _gh_get(f"https://api.github.com/users/{args.repo_owner}/repos", headers=GITHUB_HEADERS)
+    resp = _gh_get(f"https://api.github.com/users/{args.repo_owner}/repos", headers=GITHUB_HEADERS, reserve_rate_limit=max(args.reserve_rate_limit or 0, 0))
     resp.raise_for_status()
     logger.info(f"Found {len(resp_json := resp.json())} repositories in {args.repo_owner}")
     for repo in resp_json:
