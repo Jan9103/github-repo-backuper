@@ -15,6 +15,7 @@ const HTML_HEAD = '
   table.issues td {border-top:1px solid black;padding:7px;}
   div.reactions>span {background-color:gray;border-radius:2px;padding:2px;margin-left:2px;color:white;}
   div.comment {border:1px solid black;border-radius:15px;padding:15px;margin:5px;}
+  issue_title {word-wrap:anywhere;}
   </style>
   <title>GitHub-repo-backuper viewer</title>
   </head><body>
@@ -117,7 +118,7 @@ def generate_issue_list [req]: nothing -> string {
         $'<tr><td><a href="(html escape $req.path)/(html escape $issue_id)">(html escape $issue_id)</a></td>'
         $'<td>(if $data.is_pull_request? == true {"📥"} else {"📌"})</td>'
         $'<td>(if $data.state? == "closed" {"🟣"} else {"🟢"})</td>'
-        $'<td>(html escape ($data.title? | default "<no title>"))'
+        $'<td class="issue_title">(html escape ($data.title? | default "<no title>"))'
         ($data.labels? | default [] | each {|label|
           if ($label | describe) == "string" {
             $'<span class="label" style="background-color:#00ff00">(html escape $label)</span>'
