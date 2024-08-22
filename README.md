@@ -41,7 +41,8 @@ This issue can be reduced using `--reserve-rate-limit 10` (or similar).
 
 ## Webui
 
-This repo also includes a webui for viewing (and maybe in the future starting) backups.
+This repo also includes a webui for viewing (and maybe in the future starting) backups.  
+The implementation is focused on simplicity and small to medium sized repos. Larger repos (tested with 4475 issues) can still be viewed, but rendering the issue-list serverside can take several minutes on a overloaded raspberry pi.
 
 * [x] User / Organisation list
 * [x] Repo list
