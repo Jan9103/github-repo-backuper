@@ -6,22 +6,20 @@ use nulib/nutils/html.nu
 const JSON = "application/json;charset=UTF-8"
 const HTML = "text/html;charset=UTF-8"
 
-const HTML_HEAD = ([
-  '<!DOCTYPE HTML><html><head>'
-  '<style>'
-  'html {background-color:wheat;}'
-  'pre {background-color:lightgray;border-radius:15px;padding:15px;white-space:pre-wrap;}'
-  'span.label {padding:5px;border-radius:5px;margin-left:2px;}'
-  'table.issues td {border-top:1px solid black;padding:7px;}'
-  'div.reactions>span {background-color:gray;border-radius:2px;padding:2px;margin-left:2px;color:white;}'
-  'div.comment {border:1px solid black;border-radius:15px;padding:15px;margin:5px;}'
-  '</style>'
-  '<title>GitHub-repo-backuper viewer</title>'
-  '</head><body>'
-] | str join "")
-const HTML_TAIL = ([
-  '</body></html>'
-] | str join "")
+const HTML_HEAD = '
+  <!DOCTYPE HTML><html><head>
+  <style>
+  html {background-color:wheat;}
+  pre {background-color:lightgray;border-radius:15px;padding:15px;white-space:pre-wrap;}
+  span.label {padding:5px;border-radius:5px;margin-left:2px;}
+  table.issues td {border-top:1px solid black;padding:7px;}
+  div.reactions>span {background-color:gray;border-radius:2px;padding:2px;margin-left:2px;color:white;}
+  div.comment {border:1px solid black;border-radius:15px;padding:15px;margin:5px;}
+  </style>
+  <title>GitHub-repo-backuper viewer</title>
+  </head><body>
+'
+const HTML_TAIL = '</body></html>'
 
 
 def main [
