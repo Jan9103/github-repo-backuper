@@ -2,7 +2,9 @@
 
 This is a tool for creating backups of github repositories.
 
-## Backup
+---
+
+## Github Backup Tool
 
 ### Supported informations:
 
@@ -27,7 +29,7 @@ This is a tool for creating backups of github repositories.
 
 ### Usage:
 
-Dependencis: [python3](https://www.python.org/) (3.11 was used for testing), [python3-requests](https://pypi.org/project/requests/)
+Dependencies: [python3](https://www.python.org/) (3.11 was used for testing), [python3-requests](https://pypi.org/project/requests/)
 
 ```sh
 python3 github-repo-backuper.py --help
@@ -39,10 +41,13 @@ python3 github-repo-backuper.py jan9103 github-repo-backuper
 other programs, such as GE-proton download-tools, to temporarely fail.  
 This issue can be reduced using `--reserve-rate-limit 10` (or similar).
 
-## Webui
+---
+
+## Webui (basic archive viewer)
 
 This repo also includes a webui for viewing (and maybe in the future starting) backups.  
-The implementation is focused on simplicity and small to medium sized repos. Larger repos (tested with 4475 issues) can still be viewed, but rendering the issue-list serverside can take several minutes on a overloaded raspberry pi.
+The implementation is focused on simplicity and small to medium sized repos.
+Larger repos (tested with 4475 issues) can still be viewed, but rendering the issue-list serverside can take several minutes on a overloaded raspberry pi 4.
 
 * [x] User / Organisation list
 * [x] Repo list
@@ -76,3 +81,14 @@ Starting it:
 ```sh
 nu webui.nu
 ```
+
+---
+
+## Other Scripts
+
+usage: `python3 [SCRIPT-NAME] --help`
+
+website | script-name | note(s)
+------- | ----------- | -------
+<https://code.google.com/archive> | `google-code-archive-backuper.py` | the api is rapidly deteriorating, so its 90% workarounds and might break again
+
