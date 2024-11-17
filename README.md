@@ -43,11 +43,11 @@ This issue can be reduced using `--reserve-rate-limit 10` (or similar).
 
 ---
 
-## Webui (basic archive viewer)
+## Webui (basic archive viewer and starter)
 
-This repo also includes a webui for viewing (and maybe in the future starting) backups.  
+This repo also includes a webui for viewing and starting backups.  
 The implementation is focused on simplicity and small to medium sized repos.
-Larger repos (tested with 4475 issues) can still be viewed, but rendering the issue-list serverside can take several minutes on a overloaded raspberry pi 4.
+Larger repos (tested with 4475 compressed issues) can still be viewed, but rendering the issue-list serverside can take several minutes on a overloaded raspberry pi 4.
 
 * [x] User / Organisation list
 * [x] Repo list
@@ -64,6 +64,8 @@ Larger repos (tested with 4475 issues) can still be viewed, but rendering the is
 * [ ] Discussion details
 * [ ] View commit diffs
 * [ ] View commit history
+* [x] Start new downloads (with queue)
+* [x] All paths are prefixed with `/github` to make it easier to use with a reverse-proxy
 
 ### Usage:
 
@@ -73,13 +75,20 @@ The UI is written in the [nu](https://nushell.sh) script language (required).
 Manual dependency installation:
 
 1. `mkdir nulibs`
-2. `curl "https://raw.githubusercontent.com/Jan9103/webserver.nu/main/webserver/mod.nu" -o nulibs/webserver.nu`
-3. Copy the `nutils` directory from the [nutils-repo](https://github.com/jan9103/nutils) into `nulibs`
+2. Copy the `webserver` directory from the [webserver.nu-repo](https://github.com/jan9103/webserver.nu) into `nulibs` (used as webserver framework)
+3. Copy the `nutils` directory from the [nutils-repo](https://github.com/jan9103/nutils) into `nulibs` (used for escaping html, etc)
+3. Copy the `nagoya` directory from the [nagoya-repo](https://github.com/jan9103/nagoya) into `nulibs` (used for multithreading by the download system)
 
 Starting it:
 
 ```sh
 nu webui.nu
+
+# with download-ui:
+nu webui.nu --with-download-ui
+
+# on another port (default is 8080)
+nu webui.nu --port 80
 ```
 
 ---

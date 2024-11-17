@@ -1,7 +1,8 @@
-use nulib/webserver.nu format_http
-use nulib/webserver.nu start_webserver
-use nulib/webserver.nu http_redirect
-use nulib/nutils/html.nu
+use ./nulib/nagoya fgq
+use ./nulib/nutils/html.nu
+use ./nulib/webserver format_http
+use ./nulib/webserver http_redirect
+use ./nulib/webserver start_webserver
 
 const JSON = "application/json;charset=UTF-8"
 const HTML = "text/html;charset=UTF-8"
@@ -25,10 +26,24 @@ const HTML_TAIL = '</body></html>'
 
 def main [
   --port: int = 8080
+  --with-download-ui
 ] {
+  let download_q = (if $with_download_ui { fgq create } else { null })
+  if $with_download_ui {
+    0 | tee {||
+      while ($download_q | path exists) {
+        let next = (fgq pop $download_q)
+        if $next != null {
+          ^python3 ./github-repo-backuper.py ...$next
+        } else { sleep 10sec }
+      }
+    } | null
+  }
+
   start_webserver $port {|req|
     if $req.path == "/" {return (http_redirect "/index.html")}
-    if $req.path == ("/github") {return (generate_landingpage)}
+    if ($with_download_ui) and ($req.path == '/github/_init_download') {return (generate_init_download $req $download_q)}
+    if $req.path == "/github" {return (generate_landingpage $with_download_ui)}
     if $req.path =~ "^/github/[^/]+$" {return (generate_userpage $req)}
     if $req.path =~ "^/github/[^/]+/[^/]+$" {return (generate_repopage $req)}
     if $req.path =~ "^/github/[^/]+/[^/]+/issues$" {return (generate_issue_list $req)}
@@ -37,14 +52,57 @@ def main [
     if $req.path =~ '^/github/[^/]+/[^/]+/releases/\d+$' {return (generate_release_details_page $req)}
     format_http 404 $HTML ([$HTML_HEAD '<h1>Page not found</h1><a href="/github">Go Home</a>' $HTML_TAIL] | str join '')
   }
+
+  if $with_download_ui {
+    fgq delete $download_q
+  }
 }
 
+def generate_init_download [request, download_q]: nothing -> string {
+  let valid = (
+    ("repo_owner" in $request.params)
+    and ($request.params.repo_owner =~ '^[^ \t]+$')
+    and ("repo_name" in $request.params)
+    and ($request.params.repo_name =~ '^[^ \t]+$')
+  )
+  if $valid {
+    fgq push $download_q ([
+      $request.params.repo_owner
+      $request.params.repo_name
+      (if $request.params.compress? == "true" { "--gzip" })
+      (if $request.params.wiki? == "true" { "--include-wiki" })
+      (if $request.params.releases? == "true" { "--include-releases" })
+      (if $request.params.detailed_prs? == "true" { "--detailed-prs" })
+      (if $request.params.lfs? == "true" { "--include-lfs" })
+      (if $request.params.prune? == "true" { "--prune" })
+    ] | where $it != null)
+  }
+  format_http (if "repo_owner" in $request.params and not $valid { 400 } else { 200 }) $HTML ([
+    $HTML_HEAD
+    '<a href="/github">Back</a>'
+    (if "repo_owner" in $request.params { if $valid { '<p>Added repo to que.</p>' } else { '<p>Your last start-requst was invalid.</p>' } } else { '' })
+    '<h1>Initialize new Download</h1>'
+    '<form>'
+    '<label for="repo_owner">Repo Owner:</label><br><input type="text" id="repo_owner" name="repo_owner"><br>'
+    '<label for="repo_name">Repo Name:</label><br><input type="text" id="repo_name" name="repo_name"><br>'
+    '<input type="checkbox" id="compress" name="compress" value="true" checked><label for="compress">Compress</label><br>'
+    '<input type="checkbox" id="wiki" name="wiki" value="true" checked><label for="wiki">Include Wiki</label><br>'
+    '<input type="checkbox" id="releases" name="releases" value="true" checked><label for="releases">Include Releases</label><br>'
+    '<input type="checkbox" id="prune" name="prune" value="true"><label for="prune">Prune</label><br>'
+    '<input type="checkbox" id="detailed_prs" name="detailed_prs" value="true" checked><label for="detailed_prs">Detailed PRs</label><br>'
+    '<input type="checkbox" id="lfs" name="lfs" value="true"><label for="lfs">Include LFS</label><br>'
+    '<input type="submit" value="Submit">'
+    '</form>'
+    $HTML_TAIL
+  ] | str join '')
+}
 
-def generate_landingpage []: nothing -> string {
+def generate_landingpage [download_ui_enabled: bool]: nothing -> string {
   if (not ($'github' | path exists)) {return (format_http 404 $HTML "Nothing found. no users, no repos, nothing.")}
   format_http 200 $HTML ([
     $HTML_HEAD
     "<h1>GitHub repo backuper results</h1>"
+    (if $download_ui_enabled { '<a href="/github/_init_download">Initialize a new download</a>' } else { '' })
     "<h2>Users and Orgs</h2><ul>"
     ((ls github/).name | sort | each {|i| $'<li><a href="/(html escape $i)">(html escape $i)</a></li>'} | str join '')
     "</ul>"

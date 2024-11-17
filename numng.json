@@ -1,7 +1,9 @@
 {
     "name": "github-repo-backuper",
     "linkin": {
-        "webserver/mod.nu:nulib/webserver.nu": {"name": "webserver.nu", "source_uri": "https://github.com/jan9103/webserver.nu"},
-        "nutils:nulib/nutils": {"name": "nutils", "source_uri": "https://github.com/jan9103/nutils"}
-    }
+        "nagoya:nulib/nagoya": {"name": "jan9103/nagoya", "version": "~1.0.1"},
+        "nutils:nulib/nutils": {"name": "jan9103/nutils", "version": "~1.0.1"},
+        "webserver:nulib/webserver": {"name": "jan9103/webserver.nu", "version": "~1.2.1"}
+    },
+    "registry": [{"source_uri": "https://github.com/Jan9103/numng_repo", "package_format": "numng", "path_offset": "repo"}]
 }
