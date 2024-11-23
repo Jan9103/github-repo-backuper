@@ -1,4 +1,4 @@
-use ./nulib/nagoya fgq
+use ./nulib/nagoya/fgq.nu
 use ./nulib/nutils/html.nu
 use ./nulib/webserver format_http
 use ./nulib/webserver http_redirect
