@@ -27,6 +27,7 @@ const HTML_TAIL = '</body></html>'
 def main [
   --port: int = 8080
   --with-download-ui
+  --download-que-check-rate: duration = 15min
 ] {
   let download_q = (if $with_download_ui { fgq create } else { null })
   if $with_download_ui {
@@ -34,8 +35,15 @@ def main [
       while ($download_q | path exists) {
         let next = (fgq pop $download_q)
         if $next != null {
-          ^python3 ./github-repo-backuper.py ...$next
-        } else { sleep 10sec }
+          for attempt in 1..5 {
+            try {
+              ^python3 ./github-repo-backuper.py ...$next
+              break
+            }
+            print $'Download failed.. retrying in 1min.. [attempt ($attempt) / 5]'
+            sleep 1min
+          }
+        } else { sleep $download_que_check_rate }
       }
     } | null
   }
