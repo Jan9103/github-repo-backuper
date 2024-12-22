@@ -57,7 +57,8 @@ def main [
     if $req.path =~ "^/github/[^/]+/[^/]+/issues$" {return (generate_issue_list $req)}
     if $req.path =~ '^/github/[^/]+/[^/]+/issues/\d+$' {return (generate_issue_details $req)}
     if $req.path =~ "^/github/[^/]+/[^/]+/releases$" {return (generate_release_list_page $req)}
-    if $req.path =~ '^/github/[^/]+/[^/]+/releases/\d+$' {return (generate_release_details_page $req)}
+    # this does currently not work, since `nc` (webui.nu) restarts to slow and thus causes git to fail with a `Failed to connect to SERVER`
+    if $req.path =~ '^/github/[^/]+/[^/]+/clone/.*$' {return (git_clone $req)}
     format_http 404 $HTML ([$HTML_HEAD '<h1>Page not found</h1><a href="/github">Go Home</a>' $HTML_TAIL] | str join '')
   }
 
@@ -286,6 +287,20 @@ def generate_release_list_page [req]: nothing -> string {
     '</ul>'
     $HTML_TAIL
   ] | str join '')
+}
+
+def git_clone [req]: nothing -> string {
+  let rp = ($req.path | parse "/github/{user}/{repo}/clone/{path}").0
+  if $rp.user !~ "^[a-zA-Z0-9_-]+$" {return (format_http 300 $HTML "Invalid user name")}
+  if $rp.repo in ["..", "."] {return (format_http 300 $HTML "Invalid repo name")}  # "/" is already filter by mapper
+  if '..' in $rp.path {return (format_http 300 $HTML "<html><h1>Security error</h1><p>Repo path contains <code>..</code></p></html>")}
+  if (not ($"github/($rp.user)/($rp.repo)/git" | path exists)) {return (format_http 404 "text/plain;charset=utf-8" $"Repo has no git-clone or does not exist")}
+  if (not ($"github/($rp.user)/($rp.repo)/git/($rp.path)" | path exists)) {return (format_http 404 "text/plain;charset=utf-8" $"Repo has no git-clone or does not exist")}
+  if $rp.path == "info/refs" { do {
+    cd $"github/($rp.user)/($rp.repo)/git"
+    ^git update-server-info  # make web-cloneable / update info
+  } }
+  format_http 200 'application/octet-stream' (open --raw $'github/($rp.user)/($rp.repo)/git/($rp.path)')
 }
 
 def generate_release_details_page [req]: nothing -> string {
